@@ -30,16 +30,23 @@ while True:
     command_queue = []
     # For every ship that I control
     for ship in game_map.get_me().all_ships():
+
         # If the ship is docked
         if ship.docking_status != ship.DockingStatus.UNDOCKED:
             # Skip this ship
             continue
 
-        # For each planet in the game (only non-destroyed planets are included)
-        for planet in game_map.all_planets():
+        # For each planet currently in the game (in order of distance)
+        entities_by_distance = game_map.nearby_entities_by_distance(ship)
+        nearest_planet = None
+        for distance in sorted(entities_by_distance):
+            nearest_planet = next((nearest for nearest in entities_by_distance[distance]))
+            if not (isinstance(nearest_planet, hlt.entity.Planet) and nearest_planet):
+                continue
+            planet = nearest_planet
+
             # If the planet is owned
             if planet.is_owned():
-                # Skip this planet
                 continue
 
             # If we can dock, let's (try to) dock. If two ships try to dock at once, neither will be able to.
@@ -58,7 +65,7 @@ while True:
                 navigate_command = ship.navigate(
                     ship.closest_point_to(planet),
                     game_map,
-                    speed=int(hlt.constants.MAX_SPEED/2),
+                    speed=int(hlt.constants.MAX_SPEED / 1.5),
                     ignore_ships=True)
                 # If the move is possible, add it to the command_queue (if there are too many obstacles on the way
                 # or we are trapped (or we reached our destination!), navigate_command will return null;
