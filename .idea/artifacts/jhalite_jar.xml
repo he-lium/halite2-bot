@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="jhalite:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/jhalite_jar</output-path>
+    <root id="archive" name="jhalite.jar">
+      <element id="module-output" name="jhalite" />
+    </root>
+  </artifact>
+</component>
