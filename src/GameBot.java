@@ -10,8 +10,8 @@ public class GameBot {
     private GameMap gameMap;
     private HashMap<Integer, Integer> targets; // Ship ID -> Planet ID
     private int numOwnedPlanets;
-    final static int NAV_NUM_CORRECTIONS = 4;
-    final static double PROB_DOCK = 0.5;
+    private final static int NAV_NUM_CORRECTIONS = 6;
+    private final static double PROB_DOCK = 0.5;
 
     public GameBot(GameMap g) {
         this.gameMap = g;
@@ -88,6 +88,7 @@ public class GameBot {
             }
 
             // Check whether target still exists
+            if (!targets.containsKey(ship.getId())) continue;
             Planet target = gameMap.getPlanet(targets.get(ship.getId()));
             if (target == null) {
                 // Target no longer exists; recalculate target
