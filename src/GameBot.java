@@ -10,8 +10,10 @@ public class GameBot {
     private GameMap gameMap;
     private HashMap<Integer, Integer> targets; // Ship ID -> Planet ID
     private int numOwnedPlanets;
+    private ArrayList<Planet> ourPlanets;
     private final static int NAV_NUM_CORRECTIONS = 6;
     private final static double PROB_DOCK = 0.5;
+    private final static int OFFENSE_THRESHOLD = 4;
 
     public GameBot(GameMap g) {
         this.gameMap = g;
@@ -62,6 +64,9 @@ public class GameBot {
 
     public ArrayList<Move> makeMove() {
         numOwnedPlanets = gameMap.getAllPlanets().values().stream().mapToInt(planet -> planet.isOwned() ? 1 : 0).sum();
+        ourPlanets = new ArrayList<>(gameMap.getAllPlanets().values());
+        ourPlanets.removeIf(p -> p.getOwner() == gameMap.getMyPlayer().getId());
+//                planet -> planet.getOwner() == gameMap.getMyPlayer().getId()));
         ArrayList<Move> moveList = new ArrayList<>();
 
         for (final Ship ship : gameMap.getMyPlayer().getShips().values()) {
@@ -88,10 +93,19 @@ public class GameBot {
             }
 
             // Check whether target still exists
-            if (!targets.containsKey(ship.getId())) continue;
+            if (!targets.containsKey(ship.getId())) {
+                Log.log("NULL NULL NULL");
+                continue;
+            }
             Planet target = gameMap.getPlanet(targets.get(ship.getId()));
             if (target == null) {
                 // Target no longer exists; recalculate target
+                target = (Planet) decideTarget(ship);
+            }
+
+            // If target is owned by opponent and we don't have enough owned planets
+            if (target.isOwned() && target.getOwner() != gameMap.getMyPlayer().getId()
+                    && ourPlanets.size() < OFFENSE_THRESHOLD) {
                 target = (Planet) decideTarget(ship);
             }
 
@@ -111,9 +125,8 @@ public class GameBot {
                     if (ship.canDock(target)) {
                         moveList.add(new DockMove(ship, target));
                     } else {
-                        Log.log("can't dock");
                         ThrustMove approachPlanet = Navigation.navigateShipToDock(
-                                gameMap, ship, target, Constants.MAX_SPEED / 2
+                                gameMap, ship, target, Constants.MAX_SPEED - 1
                         );
                         if (approachPlanet != null) moveList.add(approachPlanet);
                     }
@@ -121,7 +134,7 @@ public class GameBot {
             } else {
                 final ThrustMove moveToTarget = Navigation.navigateShipTowardsTarget(
                         gameMap, ship, new Position(target.getXPos(), target.getYPos()),
-                        Constants.MAX_SPEED - 2, true, NAV_NUM_CORRECTIONS,
+                        Constants.MAX_SPEED, true, NAV_NUM_CORRECTIONS,
                         Math.toRadians(20)
                 );
                 if (moveToTarget != null) moveList.add(moveToTarget);
@@ -141,7 +154,8 @@ public class GameBot {
         for (final Planet planet : planets) {
             if (planet.getOwner() == gameMap.getMyPlayer().getId())
                 continue;
-            if (planet.isOwned() && ((double) numOwnedPlanets / gameMap.getAllPlanets().size()) < 0.6)
+            if (planet.isOwned() && ourPlanets.size() < OFFENSE_THRESHOLD &&
+                    ((double) numOwnedPlanets / gameMap.getAllPlanets().size()) < 0.6)
                 continue;
             // Designate as target
             targets.put(ship.getId(), planet.getId());
