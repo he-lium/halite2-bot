@@ -70,7 +70,7 @@ public class GameMap {
         final ArrayList<Entity> entitiesFound = new ArrayList<>();
 
         addEntitiesBetween(entitiesFound, start, target, planets.values());
-        addEntitiesBetween(entitiesFound, start, target, allShips);
+        addEntitiesBetween(entitiesFound, start, target, getMyPlayer().getShips().values());
 
         return entitiesFound;
     }
