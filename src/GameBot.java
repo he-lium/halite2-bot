@@ -1,5 +1,4 @@
 
-
 import hlt.*;
 import org.omg.CORBA.NVList;
 
@@ -14,6 +13,7 @@ public class GameBot {
     private final static int NAV_NUM_CORRECTIONS = 6;
     private final static double PROB_DOCK = 0.5;
     private final static int OFFENSE_THRESHOLD = 4;
+    private int turnCount;
 
     public GameBot(GameMap g) {
         this.gameMap = g;
@@ -47,6 +47,7 @@ public class GameBot {
             i++;
             if (i >= planets.size()) i = 0;
         }
+        turnCount = 0;
     }
 
     private ArrayList<Planet> getPlanetsByDistance(Position pos) {
@@ -132,9 +133,11 @@ public class GameBot {
                     }
                 }
             } else {
+                // Move to target
+                int speed = (turnCount < 5) ? Constants.MAX_SPEED / 2 : Constants.MAX_SPEED;
                 final ThrustMove moveToTarget = Navigation.navigateShipTowardsTarget(
                         gameMap, ship, new Position(target.getXPos(), target.getYPos()),
-                        Constants.MAX_SPEED, true, NAV_NUM_CORRECTIONS,
+                        speed, true, NAV_NUM_CORRECTIONS,
                         Math.toRadians(20)
                 );
                 if (moveToTarget != null) moveList.add(moveToTarget);
@@ -144,6 +147,7 @@ public class GameBot {
 
         if (targets.size() > gameMap.getMyPlayer().getShips().size() * 2)
             clean();
+        turnCount++;
         return moveList;
     }
 
@@ -152,7 +156,7 @@ public class GameBot {
         // Nearest unowned planet
         ArrayList<Planet> planets = getPlanetsByDistance(new Position(ship.getXPos(), ship.getYPos()));
         for (final Planet planet : planets) {
-            if (planet.getOwner() == gameMap.getMyPlayer().getId())
+            if (planet.getOwner() == gameMap.getMyPlayer().getId() && planet.getDockedShips().size() > 1)
                 continue;
             if (planet.isOwned() && ourPlanets.size() < OFFENSE_THRESHOLD &&
                     ((double) numOwnedPlanets / gameMap.getAllPlanets().size()) < 0.6)
