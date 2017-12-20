@@ -1,7 +1,4 @@
-
 import hlt.*;
-import org.omg.CORBA.NVList;
-
 import java.net.ConnectException;
 import java.util.*;
 
@@ -14,6 +11,21 @@ public class GameBot {
     private final static double PROB_DOCK = 0.5;
     private final static int OFFENSE_THRESHOLD = 4;
     private int turnCount;
+    // number of undocked ships that are targeting planet
+    private HashMap<Planet, Integer> incoming;
+
+    private void recalcIncoming() {
+        incoming = new HashMap<>();
+        for (final Ship ship : gameMap.getMyPlayer().getShips().values()) {
+            if (ship.getDockingStatus() == Ship.DockingStatus.Docked) continue;
+            if (!targets.containsKey(ship.getId())) continue;
+            // Increment incoming count of target planet
+            final Planet target = gameMap.getPlanet(targets.get(ship.getId()));
+            if (incoming.containsKey(target))
+                incoming.put(target, incoming.get(target) + 1);
+            else incoming.put(target, 1);
+        }
+    }
 
     public GameBot(GameMap g) {
         this.gameMap = g;
@@ -69,25 +81,13 @@ public class GameBot {
         ourPlanets.removeIf(p -> p.getOwner() == gameMap.getMyPlayer().getId());
 //                planet -> planet.getOwner() == gameMap.getMyPlayer().getId()));
         ArrayList<Move> moveList = new ArrayList<>();
+        recalcIncoming();
 
         for (final Ship ship : gameMap.getMyPlayer().getShips().values()) {
             if (ship.getDockingStatus() != Ship.DockingStatus.Undocked) {
                 // TODO decide whether or not to undock
                 continue;
             }
-
-            // New ship: decide whether to dock
-            // TODO fix probability implementation
-            /*if (!this.targets.containsKey(ship.getId())) {
-                Planet dock = getPlanetsByDistance(new Position(ship.getXPos(), ship.getYPos())).get(0);
-                if (dock.getOwner() == gameMap.getMyPlayer().getId()
-                        && ship.canDock(dock) && Math.random() < PROB_DOCK) {
-                    moveList.add(new DockMove(ship, dock));
-                    continue;
-                } else {
-                    decideTarget(ship);
-                }
-            }*/
 
             if (!this.targets.containsKey(ship.getId())) {
                 decideTarget(ship);
@@ -104,25 +104,23 @@ public class GameBot {
                 target = (Planet) decideTarget(ship);
             }
 
-            // If target is owned by opponent and we don't have enough owned planets
-            if (target.isOwned() && target.getOwner() != gameMap.getMyPlayer().getId()
-                    && ourPlanets.size() < OFFENSE_THRESHOLD) {
-                target = (Planet) decideTarget(ship);
+            if (target.isOwned()) {
+                if (target.getOwner() == gameMap.getMyPlayer().getId()) {
+                    // Target is ours
+                    if (target.isFull()) target = (Planet) decideTarget(ship);
+                } else if (ourPlanets.size() < OFFENSE_THRESHOLD) {
+                    // Target is opponent's and we don't have enough planets
+                    target = (Planet) decideTarget(ship);
+                }
             }
 
             if (ship.getDistanceTo(target) < Constants.DOCK_RADIUS * 5) {
                 // if planet is opponent's
                 if (target.isOwned() && target.getOwner() != gameMap.getMyPlayer().getId()) {
-                    // Charge at planet to damage
-                    // TODO Destroy opponent's ships
-                    ThrustMove chargeMove = Navigation.navigateShipTowardsTarget(
-                            gameMap, ship, new Position(target.getXPos(), target.getYPos()),
-                            Constants.MAX_SPEED, false,1, Math.toRadians(20)
-                    );
-                    if (chargeMove != null) moveList.add(chargeMove);
-
+                    final Move enemyMove = approachEnemy(ship, target);
+                    if (enemyMove != null) moveList.add(enemyMove);
                 } else {
-                    // Planet is ours
+                    // Planet is ours or undocked
                     if (ship.canDock(target)) {
                         moveList.add(new DockMove(ship, target));
                     } else {
@@ -167,6 +165,25 @@ public class GameBot {
         }
         // No remaining planets
         return planets.get(0);
+    }
+
+    // Decide action when within close range of enemy planet
+    private Move approachEnemy(Ship myShip, Planet enemy) {
+        // Charge at planet to damage
+        // TODO Destroy opponent's ships
+        if (incoming.containsKey(enemy)
+                && incoming.get(enemy) >= enemy.getDockedShips().size()) {
+            // Destroy enemy ships
+            final Ship enemyShip = gameMap.getShip(enemy.getOwner(), enemy.getDockedShips().get(0));
+            final boolean avoid = Math.random() < 0.7;
+            return Navigation.navigateShipTowardsTarget(gameMap, myShip, enemyShip,
+                    Constants.MAX_SPEED, avoid, 3, Math.toRadians(20));
+        }
+        // destroy enemy planet
+        return Navigation.navigateShipTowardsTarget(
+                gameMap, myShip, new Position(enemy.getXPos(), enemy.getYPos()),
+                Constants.MAX_SPEED, false,1, Math.toRadians(20)
+        );
     }
 
     // Clean up unused mappings
