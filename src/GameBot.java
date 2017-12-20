@@ -154,8 +154,12 @@ public class GameBot {
         // Nearest unowned planet
         ArrayList<Planet> planets = getPlanetsByDistance(new Position(ship.getXPos(), ship.getYPos()));
         for (final Planet planet : planets) {
-            if (planet.getOwner() == gameMap.getMyPlayer().getId() && planet.getDockedShips().size() > 1)
-                continue;
+            if (planet.getOwner() == gameMap.getMyPlayer().getId()) {
+                if (planet.isFull())
+                    continue;
+                else if (planet.getDockedShips().size() > 1 && Math.random() > 0.3)
+                    continue;
+            }
             if (planet.isOwned() && ourPlanets.size() < OFFENSE_THRESHOLD &&
                     ((double) numOwnedPlanets / gameMap.getAllPlanets().size()) < 0.6)
                 continue;
@@ -171,6 +175,14 @@ public class GameBot {
     private Move approachEnemy(Ship myShip, Planet enemy) {
         // Charge at planet to damage
         // TODO Destroy opponent's ships
+        for (final int enemyShipId : enemy.getDockedShips()) {
+            final Ship enemyShip = gameMap.getShip(enemy.getOwner(), enemyShipId);
+            // within range to attack enemy ship; keep attacking
+            if (myShip.getDistanceTo(enemyShip) < Constants.WEAPON_RADIUS) {
+                final int direction = myShip.orientTowardsInDeg(enemyShip);
+                return new ThrustMove(myShip, direction, 0);
+            }
+        }
         if (incoming.containsKey(enemy)
                 && incoming.get(enemy) >= enemy.getDockedShips().size()) {
             // Destroy enemy ships
