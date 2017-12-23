@@ -1,18 +1,22 @@
 import hlt.*;
-import java.net.ConnectException;
 import java.util.*;
+
 
 public class GameBot {
     private GameMap gameMap;
     private HashMap<Integer, Integer> targets; // Ship ID -> Planet ID
     private int numOwnedPlanets;
     private ArrayList<Planet> ourPlanets;
-    private final static int NAV_NUM_CORRECTIONS = 6;
+    private final static int NAV_NUM_CORRECTIONS = 20;
     private final static double PROB_DOCK = 0.5;
     private final static int OFFENSE_THRESHOLD = 4;
     private int turnCount;
     // number of undocked ships that are targeting planet
     private HashMap<Planet, Integer> incoming;
+    private Finder finder;
+    // Defence
+    // Enemy ship -> list of our ships targeting it
+    private HashMap<Ship, ArrayList<Ship>> enemyTrack;
 
     private void recalcIncoming() {
         incoming = new HashMap<>();
@@ -60,6 +64,11 @@ public class GameBot {
             if (i >= planets.size()) i = 0;
         }
         turnCount = 0;
+        finder = new Finder(gameMap);
+
+        // init defence
+        // enemyTrack = new HashMap<>();
+        initStats();
     }
 
     private ArrayList<Planet> getPlanetsByDistance(Position pos) {
@@ -78,8 +87,8 @@ public class GameBot {
     public ArrayList<Move> makeMove() {
         numOwnedPlanets = gameMap.getAllPlanets().values().stream().mapToInt(planet -> planet.isOwned() ? 1 : 0).sum();
         ourPlanets = new ArrayList<>(gameMap.getAllPlanets().values());
-        ourPlanets.removeIf(p -> p.getOwner() == gameMap.getMyPlayer().getId());
-//                planet -> planet.getOwner() == gameMap.getMyPlayer().getId()));
+        ourPlanets.removeIf(p -> p.getOwner() != gameMap.getMyPlayer().getId());
+        finder.recalculate();
         ArrayList<Move> moveList = new ArrayList<>();
         recalcIncoming();
 
@@ -114,7 +123,7 @@ public class GameBot {
                 }
             }
 
-            if (ship.getDistanceTo(target) < Constants.DOCK_RADIUS * 5) {
+            if (ship.getDistanceTo(target) < target.getRadius() + Constants.DOCK_RADIUS * 3) {
                 // if planet is opponent's
                 if (target.isOwned() && target.getOwner() != gameMap.getMyPlayer().getId()) {
                     final Move enemyMove = approachEnemy(ship, target);
@@ -131,14 +140,25 @@ public class GameBot {
                     }
                 }
             } else {
+                Log.log("moving to target");
                 // Move to target
-                int speed = (turnCount < 5) ? Constants.MAX_SPEED / 2 : Constants.MAX_SPEED;
-                final ThrustMove moveToTarget = Navigation.navigateShipTowardsTarget(
-                        gameMap, ship, new Position(target.getXPos(), target.getYPos()),
-                        speed, true, NAV_NUM_CORRECTIONS,
-                        Math.toRadians(20)
-                );
-                if (moveToTarget != null) moveList.add(moveToTarget);
+                int speed = (turnCount < 3) ? Constants.MAX_SPEED / 2 : Constants.MAX_SPEED;
+                // Try A* finder
+                final Position midTarget = null; // finder.findPath(ship, target);
+                ThrustMove move;
+                if (midTarget != null) {
+                    int direction = ship.orientTowardsInDeg(midTarget);
+                    move = new ThrustMove(ship, direction, Constants.MAX_SPEED);
+                    aStarUsed++; // stats
+                } else {
+                    move = Navigation.navigateShipTowardsTarget(
+                            gameMap, ship, new Position(target.getXPos(), target.getYPos()),
+                            speed, true, NAV_NUM_CORRECTIONS,
+                            Math.toRadians(5)
+                    );
+                    naiveUsed++; // stats
+                }
+                if (move != null) moveList.add(move);
 
             }
         }
@@ -206,5 +226,19 @@ public class GameBot {
                 targets.remove(id);
             }
         }
+    }
+
+    // Stats
+    private int aStarUsed;
+    private int naiveUsed;
+
+    private void initStats() {
+        aStarUsed = 0;
+        naiveUsed = 0;
+    }
+
+    public void printStats() {
+        Log.log("A*: " + Integer.toString(aStarUsed));
+        Log.log("Naive: " + Integer.toString(naiveUsed));
     }
 }
