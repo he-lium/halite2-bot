@@ -75,7 +75,7 @@ public class GameMap {
         return entitiesFound;
     }
 
-    private static void addEntitiesBetween(final List<Entity> entitiesFound,
+    public static void addEntitiesBetween(final List<Entity> entitiesFound,
                                            final Position start, final Position target,
                                            final Collection<? extends Entity> entitiesToCheck) {
 

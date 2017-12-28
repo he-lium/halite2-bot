@@ -6,7 +6,7 @@ public class MyBot {
 
     public static void main(final String[] args) {
         final Networking networking = new Networking();
-        final GameMap gameMap = networking.initialize("Helium-4");
+        final GameMap gameMap = networking.initialize("Helium-4a");
         // Init game
         final GameBot bot = new GameBot(gameMap);
 

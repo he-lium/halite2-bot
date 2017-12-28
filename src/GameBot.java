@@ -1,13 +1,14 @@
 import hlt.*;
 import java.net.ConnectException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class GameBot {
     private GameMap gameMap;
     private HashMap<Integer, Integer> targets; // Ship ID -> Planet ID
     private int numOwnedPlanets;
     private ArrayList<Planet> ourPlanets;
-    private final static int NAV_NUM_CORRECTIONS = 6;
+    private final static int NAV_NUM_CORRECTIONS = 20;
     private final static double PROB_DOCK = 0.5;
     private final static int OFFENSE_THRESHOLD = 4;
     private int turnCount;
@@ -40,24 +41,15 @@ public class GameBot {
 
         targets = new HashMap<>();
 
-        double x = 0, y = 0;
-        int count = gameMap.getMyPlayer().getShips().size();
-        for (final Ship ship : gameMap.getMyPlayer().getShips().values()) {
-            x += ship.getXPos();
-            y += ship.getYPos();
-        }
-        Position startPos = new Position(x / count, y / count);
-        ArrayList<Planet> planets = getPlanetsByDistance(startPos);
-
         // For each ship, set up an initial planet to target
-        int i = 0;
         for (final Ship ship : gameMap.getMyPlayer().getShips().values()) {
             // Set target planet
-            Log.log(Integer.toString(ship.getId()));
-            Log.log(Integer.toString(planets.get(i).getId()));
-            targets.put(ship.getId(), planets.get(i).getId());
-            i++;
-            if (i >= planets.size()) i = 0;
+            for (final Planet planet : getPlanetsByDistance(ship)) {
+                if (!targets.containsValue(planet.getId())) {
+                    targets.put(ship.getId(), planet.getId());
+                    break;
+                }
+            }
         }
         turnCount = 0;
     }
@@ -65,20 +57,29 @@ public class GameBot {
     private ArrayList<Planet> getPlanetsByDistance(Position pos) {
         // Get a list of planets by distance to avg
         ArrayList<Planet> planets = new ArrayList<>(gameMap.getAllPlanets().values());
-        Collections.sort(planets, (p1, p2) -> {
-            double d1 = p1.getDistanceTo(pos);
-            double d2 = p2.getDistanceTo(pos);
-            if (d1 < d2) return -1;
-            if (d1 > d2) return 1;
-            return 0;
-        });
+        Collections.sort(planets, (p1, p2) -> Double.compare(p1.getDistanceTo(pos), p2.getDistanceTo(pos)));
         return planets;
     }
 
+    private ArrayList<Move> firstMove() {
+        ArrayList<Move> moves = new ArrayList<>();
+        ArrayList<Ship> ships = new ArrayList<>(gameMap.getMyPlayer().getShips().values());
+        ships.sort(Comparator.comparingDouble(Ship::getYPos));
+        // uppermost ship
+        moves.add(new ThrustMove(ships.get(0), 0, Constants.MAX_SPEED));
+        moves.add(new ThrustMove(ships.get(1), 90, Constants.MAX_SPEED));
+        moves.add(new ThrustMove(ships.get(2), 180, Constants.MAX_SPEED));
+
+        turnCount++;
+        return moves;
+    }
+
     public ArrayList<Move> makeMove() {
-        numOwnedPlanets = gameMap.getAllPlanets().values().stream().mapToInt(planet -> planet.isOwned() ? 1 : 0).sum();
+        if (turnCount == 0) return this.firstMove();
+        numOwnedPlanets = gameMap.getAllPlanets().values().stream()
+                .mapToInt(planet -> planet.isOwned() ? 1 : 0).sum();
         ourPlanets = new ArrayList<>(gameMap.getAllPlanets().values());
-        ourPlanets.removeIf(p -> p.getOwner() == gameMap.getMyPlayer().getId());
+        ourPlanets.removeIf(p -> p.getOwner() != gameMap.getMyPlayer().getId());
 //                planet -> planet.getOwner() == gameMap.getMyPlayer().getId()));
         ArrayList<Move> moveList = new ArrayList<>();
         recalcIncoming();
@@ -119,6 +120,7 @@ public class GameBot {
                 if (target.isOwned() && target.getOwner() != gameMap.getMyPlayer().getId()) {
                     final Move enemyMove = approachEnemy(ship, target);
                     if (enemyMove != null) moveList.add(enemyMove);
+                    else Log.log("INVALID APPROACH MOVE");
                 } else {
                     // Planet is ours or undocked
                     if (ship.canDock(target)) {
@@ -132,14 +134,25 @@ public class GameBot {
                 }
             } else {
                 // Move to target
-                int speed = (turnCount < 5) ? Constants.MAX_SPEED / 2 : Constants.MAX_SPEED;
-                final ThrustMove moveToTarget = Navigation.navigateShipTowardsTarget(
-                        gameMap, ship, new Position(target.getXPos(), target.getYPos()),
-                        speed, true, NAV_NUM_CORRECTIONS,
-                        Math.toRadians(20)
-                );
+                ThrustMove moveToTarget;
+                int speed = (turnCount < 2) ? Constants.MAX_SPEED / 2 : Constants.MAX_SPEED;
+                ArrayList<Entity> inBetween = new ArrayList<>();
+                GameMap.addEntitiesBetween(inBetween, ship, target, gameMap.getAllPlanets().values());
+                // Check for docked ships
+                List<Ship> dockedShips = gameMap.getMyPlayer().getShips().values().stream()
+                        .filter(s -> s.getDockingStatus() != Ship.DockingStatus.Undocked)
+                        .collect(Collectors.toList());
+                GameMap.addEntitiesBetween(inBetween, ship, target, dockedShips);
+                if (inBetween.isEmpty()) {
+                    moveToTarget = new ThrustMove(ship, ship.orientTowardsInDeg(target), speed);
+                } else {
+                    moveToTarget = Navigation.navigateShipTowardsTarget(
+                            gameMap, ship, new Position(target.getXPos(), target.getYPos()),
+                            speed, true, NAV_NUM_CORRECTIONS,
+                            Math.toRadians(5)
+                    );
+                }
                 if (moveToTarget != null) moveList.add(moveToTarget);
-
             }
         }
 
@@ -180,22 +193,34 @@ public class GameBot {
             // within range to attack enemy ship; keep attacking
             if (myShip.getDistanceTo(enemyShip) < Constants.WEAPON_RADIUS) {
                 final int direction = myShip.orientTowardsInDeg(enemyShip);
+                Log.log("within attack range");
                 return new ThrustMove(myShip, direction, 0);
             }
         }
-        if (incoming.containsKey(enemy)
-                && incoming.get(enemy) >= enemy.getDockedShips().size()) {
-            // Destroy enemy ships
-            final Ship enemyShip = gameMap.getShip(enemy.getOwner(), enemy.getDockedShips().get(0));
-            final boolean avoid = Math.random() < 0.7;
-            return Navigation.navigateShipTowardsTarget(gameMap, myShip, enemyShip,
-                    Constants.MAX_SPEED, avoid, 3, Math.toRadians(20));
+//        if (incoming.containsKey(enemy)
+//                && incoming.get(enemy) >= enemy.getDockedShips().size()) {
+        // Destroy enemy ships
+
+        // Find enemy ship to destroy
+        for (final Ship enemyShip : enemy.getDockedShips()
+                .stream().map(id -> gameMap.getShip(enemy.getOwner(), id)).collect(Collectors.toList())) {
+            if (!Collision.segmentCircleIntersect(myShip, enemyShip, enemy, Constants.FORECAST_FUDGE_FACTOR)) {
+                // Go directly to target
+                Log.log("approaching ship with id " + Integer.toString(enemyShip.getId()));
+                return Navigation.navigateShipTowardsTarget(gameMap, myShip, enemyShip,
+                        Constants.MAX_SPEED - 2, true, 5, 5);
+            }
         }
-        // destroy enemy planet
-        return Navigation.navigateShipTowardsTarget(
-                gameMap, myShip, new Position(enemy.getXPos(), enemy.getYPos()),
-                Constants.MAX_SPEED, false,1, Math.toRadians(20)
-        );
+        // Circle around ship
+        Log.log("circle around planet");
+        int circleAngle = Math.floorMod(myShip.orientTowardsInDeg(enemy) + 90, 360);
+        return new ThrustMove(myShip, circleAngle, Constants.MAX_SPEED - 1);
+    }
+
+    private ArrayList<Entity> entitiesInBetween(Entity from, Entity to, Collection<? extends Entity> entities) {
+        ArrayList<Entity> result = new ArrayList<>();
+        GameMap.addEntitiesBetween(result, from, to, entities);
+        return result;
     }
 
     // Clean up unused mappings
