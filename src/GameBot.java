@@ -193,27 +193,29 @@ public class GameBot {
             // within range to attack enemy ship; keep attacking
             if (myShip.getDistanceTo(enemyShip) < Constants.WEAPON_RADIUS) {
                 final int direction = myShip.orientTowardsInDeg(enemyShip);
-                Log.log("within attack range");
                 return new ThrustMove(myShip, direction, 0);
             }
         }
 //        if (incoming.containsKey(enemy)
 //                && incoming.get(enemy) >= enemy.getDockedShips().size()) {
         // Destroy enemy ships
-
+        Ship lastShip = null;
         // Find enemy ship to destroy
         for (final Ship enemyShip : enemy.getDockedShips()
                 .stream().map(id -> gameMap.getShip(enemy.getOwner(), id)).collect(Collectors.toList())) {
+            lastShip = enemyShip;
             if (!Collision.segmentCircleIntersect(myShip, enemyShip, enemy, Constants.FORECAST_FUDGE_FACTOR)) {
                 // Go directly to target
-                Log.log("approaching ship with id " + Integer.toString(enemyShip.getId()));
                 return Navigation.navigateShipTowardsTarget(gameMap, myShip, enemyShip,
-                        Constants.MAX_SPEED - 2, true, 5, 5);
+                        Constants.MAX_SPEED - 2, true, 5, Math.toRadians(7) );
             }
         }
         // Circle around ship
         Log.log("circle around planet");
+//        return Navigation.navigateShipTowardsTarget(gameMap, myShip, lastShip, Constants.MAX_SPEED - 1,
+//                true, 5, 20);
         int circleAngle = Math.floorMod(myShip.orientTowardsInDeg(enemy) + 90, 360);
+
         return new ThrustMove(myShip, circleAngle, Constants.MAX_SPEED - 1);
     }
 
