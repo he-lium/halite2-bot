@@ -9,11 +9,41 @@ public class GameBot {
     private int numOwnedPlanets;
     private ArrayList<Planet> ourPlanets;
     private final static int NAV_NUM_CORRECTIONS = 20;
-    private final static double PROB_DOCK = 0.5;
     private final static int OFFENSE_THRESHOLD = 4;
     private int turnCount;
     // number of undocked ships that are targeting planet
     private HashMap<Planet, Integer> incoming;
+    private Defence.GameGrid grid;
+    // Override target for enemy ships
+    private HashMap<Integer, Ship> shipTargets; // Ship ID -> Enemy Ship target
+
+    public GameBot(GameMap g) {
+        this.gameMap = g;
+
+        // We now have 1 full minute to analyse the initial map.
+        final String initialMapIntelligence =
+                "width: " + gameMap.getWidth() +
+                        "; height: " + gameMap.getHeight() +
+                        "; players: " + gameMap.getAllPlayers().size() +
+                        "; planets: " + gameMap.getAllPlanets().size();
+        Log.log(initialMapIntelligence);
+
+        targets = new HashMap<>();
+        shipTargets = new HashMap<>();
+
+        // For each ship, set up an initial planet to target
+        for (final Ship ship : gameMap.getMyPlayer().getShips().values()) {
+            // Set target planet
+            for (final Planet planet : getPlanetsByDistance(ship)) {
+                if (!targets.containsValue(planet.getId())) {
+                    targets.put(ship.getId(), planet.getId());
+                    break;
+                }
+            }
+        }
+        grid = new Defence.GameGrid(gameMap);
+        turnCount = 0;
+    }
 
     private void recalcIncoming() {
         incoming = new HashMap<>();
@@ -28,36 +58,10 @@ public class GameBot {
         }
     }
 
-    public GameBot(GameMap g) {
-        this.gameMap = g;
-
-        // We now have 1 full minute to analyse the initial map.
-        final String initialMapIntelligence =
-                "width: " + gameMap.getWidth() +
-                        "; height: " + gameMap.getHeight() +
-                        "; players: " + gameMap.getAllPlayers().size() +
-                        "; planets: " + gameMap.getAllPlanets().size();
-        Log.log(initialMapIntelligence);
-
-        targets = new HashMap<>();
-
-        // For each ship, set up an initial planet to target
-        for (final Ship ship : gameMap.getMyPlayer().getShips().values()) {
-            // Set target planet
-            for (final Planet planet : getPlanetsByDistance(ship)) {
-                if (!targets.containsValue(planet.getId())) {
-                    targets.put(ship.getId(), planet.getId());
-                    break;
-                }
-            }
-        }
-        turnCount = 0;
-    }
-
     private ArrayList<Planet> getPlanetsByDistance(Position pos) {
         // Get a list of planets by distance to avg
         ArrayList<Planet> planets = new ArrayList<>(gameMap.getAllPlanets().values());
-        Collections.sort(planets, (p1, p2) -> Double.compare(p1.getDistanceTo(pos), p2.getDistanceTo(pos)));
+        planets.sort(Comparator.comparingDouble(p -> p.getDistanceTo(pos)));
         return planets;
     }
 
@@ -68,22 +72,25 @@ public class GameBot {
         // uppermost ship
         moves.add(new ThrustMove(ships.get(0), 0, Constants.MAX_SPEED));
         moves.add(new ThrustMove(ships.get(1), 90, Constants.MAX_SPEED));
-        moves.add(new ThrustMove(ships.get(2), 180, Constants.MAX_SPEED));
+        moves.add(new ThrustMove(ships.get(2), 200, Constants.MAX_SPEED));
 
         turnCount++;
         return moves;
     }
 
     public ArrayList<Move> makeMove() {
+        // Perform per-turn calculations
         if (turnCount == 0) return this.firstMove();
         numOwnedPlanets = gameMap.getAllPlanets().values().stream()
                 .mapToInt(planet -> planet.isOwned() ? 1 : 0).sum();
         ourPlanets = new ArrayList<>(gameMap.getAllPlanets().values());
         ourPlanets.removeIf(p -> p.getOwner() != gameMap.getMyPlayer().getId());
-//                planet -> planet.getOwner() == gameMap.getMyPlayer().getId()));
         ArrayList<Move> moveList = new ArrayList<>();
         recalcIncoming();
+        grid.update(gameMap);
+        Log.log("Ship targets: " + Integer.toString(Defence.getThreats(ourPlanets, grid).size()));
 
+        // Process each ship
         for (final Ship ship : gameMap.getMyPlayer().getShips().values()) {
             if (ship.getDockingStatus() != Ship.DockingStatus.Undocked) {
                 // TODO decide whether or not to undock
@@ -227,10 +234,14 @@ public class GameBot {
 
     // Clean up unused mappings
     private void clean() {
-        for (Integer id : new HashSet<>(targets.keySet())) {
+        final HashSet<Integer> idCheck = new HashSet<>();
+        idCheck.addAll(targets.keySet());
+        idCheck.addAll(shipTargets.keySet());
+        for (int id : idCheck) {
             if (!gameMap.getMyPlayer().getShips().keySet().contains(id)) {
                 // Ship no longer exists
                 targets.remove(id);
+                shipTargets.remove(id);
             }
         }
     }

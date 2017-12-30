@@ -26,7 +26,7 @@ public class Defence {
         return result;
     }
 
-    public class GameGrid {
+    public static class GameGrid {
         public static final int SCALE = 7;
         private ArrayList<ArrayList<ArrayList<Entity>>> grid;
 
