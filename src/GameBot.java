@@ -86,9 +86,8 @@ public class GameBot {
         ourPlanets = new ArrayList<>(gameMap.getAllPlanets().values());
         ourPlanets.removeIf(p -> p.getOwner() != gameMap.getMyPlayer().getId());
         ArrayList<Move> moveList = new ArrayList<>();
-        recalcIncoming();
-        grid.update(gameMap);
-        Log.log("Ship targets: " + Integer.toString(Defence.getThreats(ourPlanets, grid).size()));
+        recalcIncoming(); // calculate incoming per planet
+        assignDefence(); // retarget enemy ships near our planets
 
         // Process each ship
         for (final Ship ship : gameMap.getMyPlayer().getShips().values()) {
@@ -167,6 +166,27 @@ public class GameBot {
             clean();
         turnCount++;
         return moveList;
+    }
+
+    /**
+     * Assign ships to target enemy ships near our planets
+     */
+    private void assignDefence() {
+        grid.update(gameMap);
+        for (final Ship threat : Defence.getThreats(ourPlanets, grid)) {
+            // Assign nearest ship to target the threat
+            ArrayList<Ship> ships = new ArrayList<>(gameMap.getMyPlayer().getShips().values());
+            ships.removeIf(ship ->
+                    ship.getDockingStatus() != Ship.DockingStatus.Undocked
+                            || ship.getDistanceTo(threat) > 30
+                            || shipTargets.containsKey(ship.getId())
+            );
+            ships.sort(Comparator.comparingDouble(ship -> ship.getDistanceTo(threat)));
+            if (!ships.isEmpty()) {
+                final Ship assignee = ships.get(0);
+                shipTargets.put(assignee.getId(), threat);
+            }
+        }
     }
 
     // (re)calculate which planet the ship should target
