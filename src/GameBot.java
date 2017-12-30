@@ -96,6 +96,21 @@ public class GameBot {
                 continue;
             }
 
+            // If ship has been assigned a ship target
+            if (shipTargets.containsKey(ship.getId())) {
+                final Ship validate = shipTargets.get(ship.getId());
+                final Ship enemyShip = gameMap.getShip(validate.getOwner(), validate.getId());
+                if (enemyShip == null) {
+                    shipTargets.remove(ship.getId());
+                } else {
+                    ThrustMove move = approachEnemyShip(ship, enemyShip);
+                    if (move != null) {
+                        moveList.add(move);
+                        continue;
+                    }
+                }
+            }
+
             if (!this.targets.containsKey(ship.getId())) {
                 decideTarget(ship);
             }
@@ -167,6 +182,12 @@ public class GameBot {
             clean();
         turnCount++;
         return moveList;
+    }
+
+    private ThrustMove approachEnemyShip(Ship ship, Ship enemyShip) {
+        return Navigation.navigateShipTowardsTarget(gameMap, ship, enemyShip,
+                Constants.MAX_SPEED - 1, true, NAV_NUM_CORRECTIONS,
+                Math.toRadians(5));
     }
 
     /**
