@@ -84,7 +84,7 @@ public class GameBot {
         numOwnedPlanets = gameMap.getAllPlanets().values().stream()
                 .mapToInt(planet -> planet.isOwned() ? 1 : 0).sum();
         ourPlanets = new ArrayList<>(gameMap.getAllPlanets().values());
-        ourPlanets.removeIf(p -> p.getOwner() != gameMap.getMyPlayer().getId());
+        ourPlanets.removeIf(p -> p.getOwner() != gameMap.getMyPlayerId());
         ArrayList<Move> moveList = new ArrayList<>();
         recalcIncoming(); // calculate incoming per planet
         assignDefence(); // retarget enemy ships near our planets
@@ -112,7 +112,7 @@ public class GameBot {
             }
 
             if (target.isOwned()) {
-                if (target.getOwner() == gameMap.getMyPlayer().getId()) {
+                if (target.getOwner() == gameMap.getMyPlayerId()) {
                     // Target is ours
                     if (target.isFull()) target = (Planet) decideTarget(ship);
                 } else if (ourPlanets.size() < OFFENSE_THRESHOLD) {
@@ -121,9 +121,10 @@ public class GameBot {
                 }
             }
 
-            if (ship.getDistanceTo(target) < Constants.DOCK_RADIUS * 5) {
+            // Target planet is nearby
+            if (ship.getDistanceTo(target) < (Constants.DOCK_RADIUS * 5)) {
                 // if planet is opponent's
-                if (target.isOwned() && target.getOwner() != gameMap.getMyPlayer().getId()) {
+                if (target.isOwned() && target.getOwner() != gameMap.getMyPlayerId()) {
                     final Move enemyMove = approachEnemy(ship, target);
                     if (enemyMove != null) moveList.add(enemyMove);
                     else Log.log("INVALID APPROACH MOVE");
@@ -141,7 +142,7 @@ public class GameBot {
             } else {
                 // Move to target
                 ThrustMove moveToTarget;
-                int speed = (turnCount < 2) ? Constants.MAX_SPEED / 2 : Constants.MAX_SPEED;
+                int speed = (turnCount < 4) ? Constants.MAX_SPEED - 2 : Constants.MAX_SPEED;
                 ArrayList<Entity> inBetween = new ArrayList<>();
                 GameMap.addEntitiesBetween(inBetween, ship, target, gameMap.getAllPlanets().values());
                 // Check for docked ships
@@ -192,17 +193,17 @@ public class GameBot {
     // (re)calculate which planet the ship should target
     private Entity decideTarget(Ship ship) {
         // Nearest unowned planet
-        ArrayList<Planet> planets = getPlanetsByDistance(new Position(ship.getXPos(), ship.getYPos()));
+        ArrayList<Planet> planets = getPlanetsByDistance(ship);
         for (final Planet planet : planets) {
-            if (planet.getOwner() == gameMap.getMyPlayer().getId()) {
+            if (planet.getOwner() == gameMap.getMyPlayerId()) {
                 if (planet.isFull())
-                    continue;
+                    continue; // skip if is our planet and full
                 else if (planet.getDockedShips().size() > 1 && Math.random() > 0.3)
-                    continue;
+                    continue; // skip sometimes if 2+ ships on planet
             }
             if (planet.isOwned() && ourPlanets.size() < OFFENSE_THRESHOLD &&
                     ((double) numOwnedPlanets / gameMap.getAllPlanets().size()) < 0.6)
-                continue;
+                continue; // skip if enemy planet and we don't own enough planets
             // Designate as target
             targets.put(ship.getId(), planet.getId());
             return planet;
