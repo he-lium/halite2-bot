@@ -137,7 +137,7 @@ public class GameBot {
             }
 
             // Target planet is nearby
-            if (ship.getDistanceTo(target) < (Constants.DOCK_RADIUS * 5)) {
+            if (ship.getDistanceTo(target) < (target.getRadius() + Constants.DOCK_RADIUS * 4)) {
                 // if planet is opponent's
                 if (target.isOwned() && target.getOwner() != gameMap.getMyPlayerId()) {
                     final Move enemyMove = approachEnemy(ship, target);
