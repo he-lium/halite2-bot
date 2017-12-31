@@ -165,7 +165,7 @@ public class GameBot {
                         .filter(s -> s.getDockingStatus() != Ship.DockingStatus.Undocked)
                         .collect(Collectors.toList());
                 GameMap.addEntitiesBetween(inBetween, ship, target, dockedShips);
-                if (inBetween.isEmpty()) {
+                if (inBetween.isEmpty() && turnCount > 8) {
                     moveToTarget = new ThrustMove(ship, ship.orientTowardsInDeg(target), speed);
                 } else {
                     moveToTarget = Navigation.navigateShipTowardsTarget(
