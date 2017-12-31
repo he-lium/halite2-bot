@@ -261,11 +261,11 @@ public class GameBot {
         }
         // Circle around ship
         Log.log("circle around planet");
-//        return Navigation.navigateShipTowardsTarget(gameMap, myShip, lastShip, Constants.MAX_SPEED - 1,
-//                true, 5, 20);
-        int circleAngle = Math.floorMod(myShip.orientTowardsInDeg(enemy) + 90, 360);
+        return Navigation.navigateShipTowardsTarget(gameMap, myShip, lastShip, Constants.MAX_SPEED - 1,
+                true, NAV_NUM_CORRECTIONS, Math.toRadians(5));
+//        int circleAngle = Math.floorMod(myShip.orientTowardsInDeg(enemy) + 90, 360);
 
-        return new ThrustMove(myShip, circleAngle, Constants.MAX_SPEED - 1);
+//        return new ThrustMove(myShip, circleAngle, Constants.MAX_SPEED - 1);
     }
 
     private ArrayList<Entity> entitiesInBetween(Entity from, Entity to, Collection<? extends Entity> entities) {
