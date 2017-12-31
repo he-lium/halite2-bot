@@ -287,4 +287,12 @@ public class GameBot {
             }
         }
     }
+
+    public void logIncoming() {
+        if (incoming == null) return;
+        for (final Planet planet : incoming.keySet()) {
+            Log.log(String.format("Planet id %d, Owner %d, Incoming %d",
+                    planet.getId(), planet.getOwner(), incoming.get(planet)));
+        }
+    }
 }
