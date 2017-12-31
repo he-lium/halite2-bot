@@ -215,6 +215,7 @@ public class GameBot {
     private Entity decideTarget(Ship ship) {
         // Nearest unowned planet
         ArrayList<Planet> planets = getPlanetsByDistance(ship);
+        ArrayList<Planet> candidates = new ArrayList<>();
         for (final Planet planet : planets) {
             if (planet.getOwner() == gameMap.getMyPlayerId()) {
                 if (planet.isFull())
@@ -225,9 +226,20 @@ public class GameBot {
             if (planet.isOwned() && ourPlanets.size() < OFFENSE_THRESHOLD &&
                     ((double) numOwnedPlanets / gameMap.getAllPlanets().size()) < 0.6)
                 continue; // skip if enemy planet and we don't own enough planets
+            // Random chance of selecting a further target to diversify attack
+            if (turnCount > 100 && Math.random() < 0.2) {
+                candidates.add(planet); // save if needed later
+                continue;
+            }
             // Designate as target
             targets.put(ship.getId(), planet.getId());
             return planet;
+        }
+        // Use saved planet
+        if (!candidates.isEmpty()) {
+            final Planet saved = candidates.get(candidates.size() - 1);
+            targets.put(ship.getId(), saved.getId());
+            return saved;
         }
         // No remaining planets
         return planets.get(0);
