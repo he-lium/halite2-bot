@@ -16,9 +16,11 @@ public class GameBot {
     private Defence.GameGrid grid;
     // Override target for enemy ships
     private HashMap<Integer, Ship> shipTargets; // Ship ID -> Enemy Ship target
+    private int destroyer;
 
     public GameBot(GameMap g) {
         this.gameMap = g;
+        this.destroyer = -1;
 
         // We now have 1 full minute to analyse the initial map.
         final String initialMapIntelligence =
@@ -31,6 +33,14 @@ public class GameBot {
         targets = new HashMap<>();
         shipTargets = new HashMap<>();
 
+        final ArrayList<Ship> ourShips = new ArrayList<>(gameMap.getMyPlayer().getShips().values());
+        final Optional<Ship> enemyShip = gameMap.getAllShips().stream().filter(s -> s.getOwner() == gameMap.getMyPlayerId())
+                .findFirst();
+        final boolean destroyMode = gameMap.getAllPlayers().size() == 2
+                && enemyShip.isPresent()
+                && enemyShip.get().getDistanceTo(ourShips.get(0)) < 125;
+        if (destroyMode)
+            destroyer = ourShips.get(0).getId();
         // For each ship, set up an initial planet to target
         for (final Ship ship : gameMap.getMyPlayer().getShips().values()) {
             // Set target planet
@@ -93,6 +103,13 @@ public class GameBot {
         for (final Ship ship : gameMap.getMyPlayer().getShips().values()) {
             if (ship.getDockingStatus() != Ship.DockingStatus.Undocked) {
                 // TODO decide whether or not to undock
+                continue;
+            }
+
+            // TODO PATCH
+            if (ship.getId() == destroyer) {
+                Move move = getDestroyerMove(ship);
+                if (move != null) moveList.add(move);
                 continue;
             }
 
@@ -184,6 +201,25 @@ public class GameBot {
         return moveList;
     }
 
+    private ThrustMove getDestroyerMove(Ship ship) {
+        final ArrayList<Ship> targets = gameMap.getAllShips().stream()
+                .filter(s -> s.getOwner() != ship.getOwner() &&
+                        (turnCount < 20 || s.getDockingStatus() != Ship.DockingStatus.Undocked))
+                .collect(Collectors.toCollection(ArrayList::new));
+        if (targets.isEmpty()) {
+            destroyer = -1;
+            decideTarget(ship);
+            return null;
+        }
+        targets.sort(Comparator.comparingDouble(s -> s.getDistanceTo(ship)));
+        final Ship target = targets.get(0);
+        if (ship.getDistanceTo(target) < Constants.WEAPON_RADIUS) return null;
+        final int speed = ship.getDistanceTo(target) > 8 ? Constants.MAX_SPEED : Constants.MAX_SPEED / 2;
+        return Navigation.navigateShipTowardsTarget(gameMap, ship, target, speed,
+                true, NAV_NUM_CORRECTIONS, Math.toRadians(5));
+
+    }
+
     private ThrustMove approachEnemyShip(Ship ship, Ship enemyShip) {
         return Navigation.navigateShipTowardsTarget(gameMap, ship, enemyShip,
                 Constants.MAX_SPEED - 1, true, NAV_NUM_CORRECTIONS,
@@ -215,6 +251,12 @@ public class GameBot {
     private Entity decideTarget(Ship ship) {
         // Nearest unowned planet
         ArrayList<Planet> planets = getPlanetsByDistance(ship);
+
+        ArrayList<Planet> unowned = new ArrayList<>(planets);
+        unowned.removeIf(Planet::isOwned);
+        if (unowned.size() > 1 && Math.random() < 0.4) {
+            targets.put(ship.getId(), unowned.get(0).getId());
+        }
         for (final Planet planet : planets) {
             if (planet.getOwner() == gameMap.getMyPlayerId()) {
                 if (planet.isFull())
@@ -259,8 +301,7 @@ public class GameBot {
                         Constants.MAX_SPEED - 2, true, 5, Math.toRadians(7) );
             }
         }
-        // Circle around ship
-        Log.log("circle around planet");
+        // Circle around ship$
         return Navigation.navigateShipTowardsTarget(gameMap, myShip, lastShip, Constants.MAX_SPEED - 1,
                 true, NAV_NUM_CORRECTIONS, Math.toRadians(5));
 //        int circleAngle = Math.floorMod(myShip.orientTowardsInDeg(enemy) + 90, 360);
